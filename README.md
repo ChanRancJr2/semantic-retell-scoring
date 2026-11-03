@@ -39,6 +39,7 @@
 | timing.hostPhaseSeconds | 房主墙钟（秒） | 120 |
 | timing.hostAudioTrimSeconds | 房主音频截断（秒） | 60 |
 | timing.guestPhaseSeconds | 访客墙钟（秒） | 180 |
+| timing.hostReconnectGraceSeconds | 房主断线重连宽限（秒） | 30 |
 | scoring.grades | 等级阈值 | 90优/80良/60中/0差 |
 | audio.uploadMaxMB | 上传大小上限 | 20 |
 
@@ -96,3 +97,8 @@ EOF
 - HTTPS 证书失败：确认 80/443 已放行、域名 `<IP>.sslip.io` 解析正常，`systemctl restart caddy`。
 - ASR 报 resource not granted：确认语音控制台已开通录音文件识别（资源 ID 与 `.env` 一致）。
 - 录音无权限：必须 HTTPS 或 localhost 访问；使用系统自带最新浏览器。
+
+## 相关文档
+
+- 版本变更与问题修复记录：[CHANGELOG.md](CHANGELOG.md)
+- 高并发架构演进路线：[docs/scale.md](docs/scale.md)

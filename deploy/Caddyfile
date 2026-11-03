@@ -3,5 +3,11 @@
 # 部署脚本会把占位符 __DOMAIN__ 替换为实际域名（如 47.239.63.61.sslip.io）
 __DOMAIN__ {
 	encode gzip
-	reverse_proxy 127.0.0.1:3000
+	reverse_proxy 127.0.0.1:3000 {
+		# 显式保持 WebSocket 长连接，避免代理层空闲超时断开导致频繁重连
+		transport http {
+			read_timeout 1h
+			write_timeout 1h
+		}
+	}
 }

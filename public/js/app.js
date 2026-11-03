@@ -39,21 +39,22 @@ function emitAck(event, payload) {
 
 /* ===== Socket 连接与重连 ===== */
 socket.on("connect", async () => {
-  if (state.nickname) {
+  if (!state.nickname) return;
+  try {
+    await emitAck("user:init", { userId: state.userId, nickname: state.nickname });
+    const lastCode = localStorage.getItem("lastRoomCode");
+    if (!lastCode) return;
+    // 断线重连：用 room:reconnect 在任意阶段恢复（房间仍在且我仍是成员）
+    // 只有当房间确已关闭/我已被移除时才退回大厅，避免一次网络抖动就秒退
     try {
-      await emitAck("user:init", { userId: state.userId, nickname: state.nickname });
-      const lastCode = localStorage.getItem("lastRoomCode");
-      if (lastCode) {
-        try {
-          const snap = await emitAck("room:join", { code: lastCode });
-          enterRoom(snap);
-        } catch {
-          localStorage.removeItem("lastRoomCode");
-        }
-      }
-    } catch (e) {
-      toast(e.message);
+      const snap = await emitAck("room:reconnect", { code: lastCode });
+      enterRoom(snap);
+    } catch {
+      localStorage.removeItem("lastRoomCode");
+      backToLobby();
     }
+  } catch (e) {
+    toast(e.message);
   }
 });
 socket.on("lobby:update", () => refreshLobby());
@@ -144,6 +145,8 @@ function backToLobby(msg) {
   state.room = null;
   state.phase = null;
   state.deadline = null;
+  const ga = $("host-audio-player");
+  if (ga) ga.pause(); // 离开房间时停止正在播放的录音
   state.hostRec.releaseMic();
   state.guestRec.releaseMic();
   showView("lobby");
@@ -210,7 +213,9 @@ function renderRoom() {
 /* ===== 阶段切换 ===== */
 function handlePhase(p) {
   if (p.status === "GUEST_RECORDING" && p.hostAudioUrl) {
-    $("host-audio-player").src = p.hostAudioUrl + "?t=" + Date.now();
+    guestAudio.pause();
+    guestAudio.src = p.hostAudioUrl + "?t=" + Date.now();
+    if (typeof refreshGuestButtons === "function") refreshGuestButtons();
   }
   startUiTick();
 }
@@ -247,13 +252,35 @@ $("host-btn-delete").addEventListener("click", () => {
 });
 $("host-btn-upload").addEventListener("click", () => submitHost(false));
 
-/* ===== 录音控件：访客 ===== */
+/* ===== 录音控件：访客（播放房主录音 与 自己录音 严格互斥） ===== */
+const guestAudio = $("host-audio-player");
+
+// 根据“播放中 / 录音中”两个状态刷新按钮可用性与文案
+function refreshGuestButtons() {
+  const playing = !guestAudio.paused;
+  const recActive = state.guestRec.state !== "idle";
+  $("guest-btn-play").disabled = recActive; // 录音中禁止播放
+  $("guest-btn-rec").disabled = playing; // 播放中禁止录音
+  $("guest-btn-play").textContent = playing ? "暂停播放" : "播放房主录音";
+}
+guestAudio.addEventListener("play", refreshGuestButtons);
+guestAudio.addEventListener("pause", refreshGuestButtons);
+guestAudio.addEventListener("ended", refreshGuestButtons);
+
 $("guest-btn-play").addEventListener("click", () => {
-  const audio = $("host-audio-player");
-  audio.play().catch((e) => toast("播放失败：" + e.message));
+  if (state.guestRec.state !== "idle") return toast("请先停止录音，再播放");
+  if (guestAudio.paused) {
+    guestAudio.play().catch((e) => toast("播放失败：" + e.message));
+  } else {
+    guestAudio.pause(); // 同一按钮支持播放/暂停切换
+  }
 });
 $("guest-btn-rec").addEventListener("click", async () => {
   try {
+    if (!guestAudio.paused) {
+      guestAudio.pause(); // 开始录音前自动暂停播放，保证同一时刻只做一件事
+      toast("已暂停播放，开始录音");
+    }
     if (state.guestRec.state === "idle") {
       await state.guestRec.start();
       $("guest-btn-rec").textContent = "暂停复述";
@@ -261,6 +288,7 @@ $("guest-btn-rec").addEventListener("click", async () => {
       state.guestRec.toggle();
       $("guest-btn-rec").textContent = state.guestRec.state === "recording" ? "暂停复述" : "继续复述";
     }
+    refreshGuestButtons();
   } catch (e) {
     toast(e.message);
   }
@@ -311,11 +339,18 @@ function fmt(ms) {
 function startUiTick() {
   if (state.uiTimer) clearInterval(state.uiTimer);
   state.uiTimer = setInterval(() => {
-    // 阶段倒计时
-    if (state.deadline) {
-      const cd = $("countdown");
+    // 阶段倒计时：仅当前阶段的参与者显示，其他人隐藏（非自己阶段不计时）
+    const me = state.room && state.room.members.find((m) => m.userId === state.userId);
+    const ps = state.phase && state.phase.status;
+    const isMyTurn =
+      (ps === "HOST_RECORDING" && me && me.role === "host") ||
+      (ps === "GUEST_RECORDING" && me && me.role === "guest");
+    const cd = $("countdown");
+    if (state.deadline && isMyTurn) {
       cd.classList.remove("hidden");
       cd.textContent = fmt(state.deadline - Date.now());
+    } else {
+      cd.classList.add("hidden");
     }
     // 录音时长
     if (state.hostRec.state !== "idle") $("host-rec-time").textContent = fmt(state.hostRec.durationMs());

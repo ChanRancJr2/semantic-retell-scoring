@@ -15,6 +15,7 @@ module.exports = {
     hostPhaseSeconds: 120, // 房主阶段墙钟上限，到点自动上传已录内容
     hostAudioTrimSeconds: 60, // 房主音频实际有效时长，超过则截取前 N 秒
     guestPhaseSeconds: 180, // 访客阶段墙钟上限，到点自动上传
+    hostReconnectGraceSeconds: 30, // 房主断线重连宽限，超时未回才解散房间
   },
 
   // 评分

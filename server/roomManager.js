@@ -198,7 +198,7 @@ class RoomManager {
     room.status = STATUS.GUEST_RECORDING;
     const guestDeadline = Date.now() + config.timing.guestPhaseSeconds * 1000;
     this._schedule(room, config.timing.guestPhaseSeconds * 1000, () =>
-      this._finishGuestPhase(room)
+      this._guestPhaseTimeout(room)
     );
     this.broadcast(code, "phase", {
       status: room.status,
@@ -259,16 +259,22 @@ class RoomManager {
   _maybeFinishGuest(room) {
     const guests = [...room.members.values()].filter((m) => m.role === "guest");
     if (guests.every((g) => room.round.guestAudios.has(g.userId))) {
-      this._finishGuestPhase(room);
+      // 全员主动上传：直接进入评分，无需再催交
+      this._enterScoring(room);
     }
   }
 
-  async _finishGuestPhase(room) {
+  /** 访客阶段墙钟超时：催交未上传者，给 3 秒宽限后进入评分 */
+  _guestPhaseTimeout(room) {
+    if (room.status !== STATUS.GUEST_RECORDING) return;
+    this.broadcast(room.code, "forceSubmit", { role: "guest" });
+    this._schedule(room, 3000, () => this._enterScoring(room));
+  }
+
+  _enterScoring(room) {
     if (room.status !== STATUS.GUEST_RECORDING) return;
     this._clearTimers(room);
-    // 通知仍未上传的访客强制提交，3 秒宽限
-    this.broadcast(room.code, "forceSubmit", { role: "guest" });
-    this._schedule(room, 3000, () => this._runScoring(room));
+    this._runScoring(room);
   }
 
   async _runScoring(room) {
@@ -364,11 +370,20 @@ class RoomManager {
     this.rooms.delete(room.code);
   }
 
-  /** 重连：恢复 socket 并返回当前房间快照 */
-  reconnect(code, user) {
+  /**
+   * 重连恢复：仅允许“原本就在房间内”的成员在任意阶段重连
+   * 只恢复连接与 socketId，不重置其准备/录音等既有状态
+   */
+  reconnectRoom(code, user) {
     const room = this.rooms.get(code);
-    if (!room) return null;
-    this._addMember(room, user, user.userId === room.hostId ? "host" : "guest");
+    if (!room) throw new Error("房间不存在或已关闭");
+    const member = room.members.get(user.userId);
+    if (!member) throw new Error("你不是该房间成员，无法重连");
+    member.socketId = user.socketId;
+    member.connected = true;
+    member.nickname = user.nickname || member.nickname;
+    stmts.setConnected.run(room.id, user.userId, 1);
+    this._sync(room);
     return room;
   }
 

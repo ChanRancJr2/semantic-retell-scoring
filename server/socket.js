@@ -2,6 +2,8 @@
  * WebSocket 事件注册
  * 处理身份初始化、房间创建/加入/离开、准备、开始游戏、断线重连
  */
+const config = require("../config");
+
 module.exports = function registerSocket({ io, roomManager }) {
   const hostGrace = new Map(); // socket 所属房主房间的宽限定时器
 
@@ -41,6 +43,20 @@ module.exports = function registerSocket({ io, roomManager }) {
         clearHostGrace(room.code);
         ack && ack({ ok: true, data: roomManager.snapshot(room) });
         io.emit("lobby:update", roomManager.listRooms());
+      } catch (e) {
+        ack && ack({ ok: false, error: e.message });
+      }
+    });
+
+    // 已有成员在任意阶段断线重连（不要求 WAITING），恢复连接与房间状态
+    socket.on("room:reconnect", (payload, ack) => {
+      try {
+        const user = requireUser(socket, ack);
+        const code = payload && payload.code;
+        const room = roomManager.reconnectRoom(code, user);
+        socket.join(room.code);
+        clearHostGrace(room.code);
+        ack && ack({ ok: true, data: roomManager.snapshot(room) });
       } catch (e) {
         ack && ack({ ok: false, error: e.message });
       }
@@ -90,15 +106,17 @@ module.exports = function registerSocket({ io, roomManager }) {
       roomManager.disconnect(socket.id);
       const user = socket.data.user;
       if (!user) return;
-      // 若断开的是房主，给 30 秒宽限，未重连则解散房间
+      // 仅当断开者是房主时，启动宽限定时器；期间游戏由服务端定时器继续推进
+      // 房主在宽限内通过 room:reconnect 回来会清除该定时器，超时才解散房间
       for (const room of roomManager.rooms.values()) {
         if (room.hostId === user.userId) {
+          const graceMs = config.timing.hostReconnectGraceSeconds * 1000;
           const timer = setTimeout(() => {
             if (roomManager.rooms.has(room.code)) {
               roomManager.leave(room.code, user.userId);
               io.emit("lobby:update", roomManager.listRooms());
             }
-          }, 30000);
+          }, graceMs);
           hostGrace.set(room.code, timer);
         }
       }
