@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f6feb" />
+  <title>语音复述评分</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 身份 -->
+    <section id="view-identity" class="view active">
+      <h1 class="title">语音复述评分</h1>
+      <p class="subtitle">输入昵称进入大厅</p>
+      <input id="nickname-input" class="input" maxlength="12" placeholder="我的昵称" />
+      <button id="btn-enter" class="btn btn-primary block">进入大厅</button>
+    </section>
+
+    <!-- 大厅 -->
+    <section id="view-lobby" class="view">
+      <div class="topbar">
+        <span>大厅</span>
+        <span id="me-badge" class="badge"></span>
+      </div>
+      <button id="btn-create" class="btn btn-primary block">创建房间（成为房主）</button>
+      <div class="join-row">
+        <input id="join-code" class="input" maxlength="6" placeholder="输入房间码" />
+        <button id="btn-join" class="btn">加入</button>
+      </div>
+      <h2 class="section-title">房间列表</h2>
+      <div id="room-list" class="room-list"></div>
+    </section>
+
+    <!-- 房间 -->
+    <section id="view-room" class="view">
+      <div class="topbar">
+        <button id="btn-leave" class="btn btn-small">离开</button>
+        <span id="room-title" class="room-title"></span>
+        <span id="room-code-badge" class="badge"></span>
+      </div>
+      <div id="phase-banner" class="phase-banner"></div>
+      <div id="countdown" class="countdown hidden"></div>
+
+      <!-- 成员 -->
+      <h2 class="section-title">成员 <span id="member-count" class="badge"></span></h2>
+      <div id="member-list" class="member-list"></div>
+
+      <!-- 等待阶段操作 -->
+      <div id="waiting-actions" class="actions hidden">
+        <button id="btn-ready" class="btn btn-primary block">准备</button>
+        <button id="btn-start" class="btn btn-success block hidden">房主开始游戏</button>
+      </div>
+
+      <!-- 房主录音 -->
+      <div id="host-recorder" class="recorder-panel hidden">
+        <div id="host-rec-time" class="rec-time">00:00</div>
+        <div class="rec-buttons">
+          <button id="host-btn-rec" class="btn btn-primary">开始录制</button>
+          <button id="host-btn-delete" class="btn btn-danger">删除录音</button>
+          <button id="host-btn-upload" class="btn btn-success">上传录音</button>
+        </div>
+      </div>
+
+      <!-- 访客录音 -->
+      <div id="guest-recorder" class="recorder-panel hidden">
+        <audio id="host-audio-player" controls preload="auto"></audio>
+        <div id="guest-rec-time" class="rec-time">00:00</div>
+        <div class="rec-buttons">
+          <button id="guest-btn-play" class="btn">播放房主录音</button>
+          <button id="guest-btn-rec" class="btn btn-primary">开始复述</button>
+          <button id="guest-btn-upload" class="btn btn-success">上传录音</button>
+        </div>
+      </div>
+
+      <!-- 评分中 -->
+      <div id="scoring-tip" class="center-tip hidden">
+        <div class="spinner"></div>
+        <p>AI 正在识别与评分，请稍候…</p>
+      </div>
+
+      <!-- 结果 -->
+      <div id="result-panel" class="result-panel hidden">
+        <h2 class="section-title">本轮评分结果</h2>
+        <div id="transcript-box" class="transcript-box"></div>
+        <div id="score-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/recorder.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

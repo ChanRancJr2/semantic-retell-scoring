@@ -1,0 +1,7 @@
+# Caddy 反向代理配置：自动申请并续期 HTTPS 证书
+# 域名使用 sslip.io：IP.sslip.io 会自动解析到对应 IP，无需注册域名
+# 部署脚本会把占位符 __DOMAIN__ 替换为实际域名（如 47.239.63.61.sslip.io）
+__DOMAIN__ {
+	encode gzip
+	reverse_proxy 127.0.0.1:3000
+}

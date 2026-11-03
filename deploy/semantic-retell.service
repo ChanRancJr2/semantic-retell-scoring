@@ -1,0 +1,15 @@
+[Unit]
+Description=Semantic Retell Scoring (语音复述评分)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/semantic-retell
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=3
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
