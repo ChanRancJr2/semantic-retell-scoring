@@ -26,21 +26,29 @@ async function realScore(room) {
 
   // 1) 房主转写（提交公网 URL，服务端轮询）
   const hostAudio = room.round.hostAudio;
-  const hostText = hostAudio ? await transcribe(audioUrl(hostAudio.audioDbId), "mp3") : "";
+  const hostUrl = hostAudio ? audioUrl(hostAudio.audioDbId) : "";
+  console.log("[ASR] 房主音频 URL:", hostUrl);
+  const hostText = hostAudio ? await transcribe(hostUrl, "mp3") : "";
+  console.log("[ASR] 房主转写结果:", JSON.stringify(hostText));
   this._saveTranscript(room, room.hostId, hostText);
 
   // 2) 访客转写（并行）
   const guestData = await Promise.all(
     guests.map(async (g) => {
       const audio = room.round.guestAudios.get(g.userId);
-      const text = audio ? await transcribe(audioUrl(audio.audioDbId), "mp3") : "";
+      const gUrl = audio ? audioUrl(audio.audioDbId) : "";
+      console.log("[ASR] 访客", g.nickname, "音频 URL:", gUrl);
+      const text = audio ? await transcribe(gUrl, "mp3") : "";
+      console.log("[ASR] 访客", g.nickname, "转写:", JSON.stringify(text));
       this._saveTranscript(room, g.userId, text);
       return { userId: g.userId, nickname: g.nickname, text };
     })
   );
 
   // 3) 大模型打分
+  console.log("[LLM] 开始调用大模型评分");
   const raw = await scoreByLLM(hostText, guestData, room.hostId);
+  console.log("[LLM] 评分返回条数:", raw.length);
   const byUser = new Map(raw.map((s) => [s.userId, s]));
 
   // 4) 合并成员信息、clamp 分数、计算等级（模型漏人时补默认，保证全员有条目）

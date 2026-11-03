@@ -288,6 +288,7 @@ class RoomManager {
       const result = await this.scoring.scoreRound(room);
       this._presentResult(room, result);
     } catch (err) {
+      console.error(`[评分失败] 房间=${room.code} 错误:`, err.message);
       this._abort(room, `评分失败：${err.message}`);
     }
   }
