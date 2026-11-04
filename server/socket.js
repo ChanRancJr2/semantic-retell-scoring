@@ -5,7 +5,7 @@
 const config = require("../config");
 
 module.exports = function registerSocket({ io, roomManager }) {
-  const hostGrace = new Map(); // socket 所属房主房间的宽限定时器
+  const roomGrace = new Map(); // 房间级宽限定时器（全员离线时启动，等待重连）
 
   io.on("connection", (socket) => {
     socket.data.user = null;
@@ -40,7 +40,7 @@ module.exports = function registerSocket({ io, roomManager }) {
         const code = payload && payload.code;
         const room = roomManager.joinRoom(code, user);
         socket.join(room.code);
-        clearHostGrace(room.code);
+        clearRoomGrace(room.code);
         ack && ack({ ok: true, data: roomManager.snapshot(room) });
         io.emit("lobby:update", roomManager.listRooms());
       } catch (e) {
@@ -55,7 +55,7 @@ module.exports = function registerSocket({ io, roomManager }) {
         const code = payload && payload.code;
         const room = roomManager.reconnectRoom(code, user);
         socket.join(room.code);
-        clearHostGrace(room.code);
+        clearRoomGrace(room.code);
         ack && ack({ ok: true, data: roomManager.snapshot(room) });
       } catch (e) {
         ack && ack({ ok: false, error: e.message });
@@ -106,27 +106,28 @@ module.exports = function registerSocket({ io, roomManager }) {
       roomManager.disconnect(socket.id);
       const user = socket.data.user;
       if (!user) return;
-      // 仅当断开者是房主时，启动宽限定时器；期间游戏由服务端定时器继续推进
-      // 房主在宽限内通过 room:reconnect 回来会清除该定时器，超时才解散房间
+      // 若该用户所在房间已无任何在线成员（全员离线），启动房间级宽限，等待重连
+      // 任意成员在宽限内通过 room:reconnect/room:join 回来会清除该定时器；超时仍无人在线才关闭
       for (const room of roomManager.rooms.values()) {
-        if (room.hostId === user.userId) {
-          const graceMs = config.timing.hostReconnectGraceSeconds * 1000;
-          const timer = setTimeout(() => {
-            if (roomManager.rooms.has(room.code)) {
-              roomManager.leave(room.code, user.userId);
-              io.emit("lobby:update", roomManager.listRooms());
-            }
-          }, graceMs);
-          hostGrace.set(room.code, timer);
-        }
+        if (!room.members.has(user.userId)) continue;
+        if (roomManager.hasOnlineMembers(room.code)) continue;
+        clearRoomGrace(room.code);
+        const graceMs = config.timing.hostReconnectGraceSeconds * 1000;
+        const timer = setTimeout(() => {
+          if (roomManager.rooms.has(room.code)) {
+            roomManager.destroyIfNoOnline(room.code);
+            io.emit("lobby:update", roomManager.listRooms());
+          }
+        }, graceMs);
+        roomGrace.set(room.code, timer);
       }
     });
   });
 
-  function clearHostGrace(code) {
-    if (hostGrace.has(code)) {
-      clearTimeout(hostGrace.get(code));
-      hostGrace.delete(code);
+  function clearRoomGrace(code) {
+    if (roomGrace.has(code)) {
+      clearTimeout(roomGrace.get(code));
+      roomGrace.delete(code);
     }
   }
 

@@ -12,10 +12,10 @@ module.exports = {
 
   // 计时（单位：秒）
   timing: {
-    hostPhaseSeconds: 120, // 房主阶段墙钟上限，到点自动上传已录内容
+    hostPhaseSeconds: 180, // 房主阶段墙钟上限，到点自动上传已录内容
     hostAudioTrimSeconds: 60, // 房主音频实际有效时长，超过则截取前 N 秒
-    guestPhaseSeconds: 180, // 访客阶段墙钟上限，到点自动上传
-    hostReconnectGraceSeconds: 30, // 房主断线重连宽限，超时未回才解散房间
+    guestPhaseSeconds: 300, // 访客阶段墙钟上限，到点自动上传
+    hostReconnectGraceSeconds: Number(process.env.HOST_RECONNECT_GRACE_SECONDS) || 30, // 全员离线重连宽限，超时未回才关闭（支持环境变量覆盖，便于测试）
   },
 
   // 评分

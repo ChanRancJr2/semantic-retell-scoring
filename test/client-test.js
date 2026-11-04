@@ -7,6 +7,12 @@ const { io } = require("socket.io-client");
 
 const BASE = "http://localhost:3000";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function waitConnect(sock) {
+  return new Promise((r) => {
+    if (sock.connected) return r();
+    sock.once("connect", r);
+  });
+}
 const log = [];
 const rec = (s) => {
   log.push(s);
@@ -36,8 +42,8 @@ async function upload(code, userId, role, file) {
   let result = null;
   guest.on("result", (r) => (result = r));
   try {
-    await new Promise((r) => host.on("connect", r));
-    await new Promise((r) => guest.on("connect", r));
+    await waitConnect(host);
+    await waitConnect(guest);
     const ack = (sock, ev, pl) =>
       new Promise((res, rej) =>
         sock.emit(ev, pl || {}, (x) => (x.ok ? res(x.data) : rej(new Error(x.error))))

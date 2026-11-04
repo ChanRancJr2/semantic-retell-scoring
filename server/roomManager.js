@@ -311,19 +311,7 @@ class RoomManager {
     stmts.setRoundStatus.run("DONE", room.round.dbId);
     this.broadcast(room.code, "result", result);
     this._sync(room);
-    // 10 秒后回到等待大厅
-    this._schedule(room, 10000, () => this._backToWaiting(room));
-  }
-
-  _backToWaiting(room) {
-    this._clearTimers(room);
-    room.status = STATUS.WAITING;
-    room.round = null;
-    stmts.setRoomStatus.run(STATUS.WAITING, room.id);
-    for (const m of room.members.values()) m.ready = false;
-    stmts.resetReady.run(room.id);
-    this.broadcast(room.code, "phase", { status: STATUS.WAITING });
-    this._sync(room);
+    // 评分后房间保持结果态，不主动关闭；仅当全员退出/离线时才销毁（见 leave/disconnect）
   }
 
   _abort(room, message) {
@@ -355,13 +343,27 @@ class RoomManager {
   leave(code, userId) {
     const room = this.rooms.get(code);
     if (!room) return;
-    if (userId === room.hostId) {
-      this._destroyRoom(room);
-      return;
-    }
     room.members.delete(userId);
     stmts.removeMember.run(room.id, userId);
     this._sync(room);
+    // 仅当所有成员都主动退出后才关闭房间
+    if (room.members.size === 0) {
+      this._destroyRoom(room);
+    }
+  }
+
+  /** 是否还有在线（已连接）成员 */
+  hasOnlineMembers(code) {
+    const room = this.rooms.get(code);
+    return !!room && [...room.members.values()].some((m) => m.connected);
+  }
+
+  /** 离线宽限超时后调用：此时仍无在线成员才关闭房间 */
+  destroyIfNoOnline(code) {
+    const room = this.rooms.get(code);
+    if (room && !this.hasOnlineMembers(code)) {
+      this._destroyRoom(room);
+    }
   }
 
   _destroyRoom(room) {
