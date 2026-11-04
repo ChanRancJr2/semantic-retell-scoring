@@ -114,7 +114,7 @@ class RoomManager {
     const member = room.members.get(user.userId);
     if (!member) throw new Error("你不在该房间内");
     member.ready = ready;
-    stmts.setReady.run(room.id, user.userId, ready ? 1 : 0);
+    stmts.setReady.run(ready ? 1 : 0, room.id, user.userId);
     this._sync(room);
   }
 
@@ -144,7 +144,7 @@ class RoomManager {
       hostAudio: null,
       guestAudios: new Map(),
     };
-    stmts.setRoomStatus.run(room.id, STATUS.HOST_RECORDING);
+    stmts.setRoomStatus.run(STATUS.HOST_RECORDING, room.id);
     room.status = STATUS.HOST_RECORDING;
     stmts.resetReady.run(room.id);
 
@@ -194,7 +194,7 @@ class RoomManager {
       audioDbId: hostAudioRow.lastInsertRowid,
     };
 
-    stmts.setRoomStatus.run(room.id, STATUS.GUEST_RECORDING);
+    stmts.setRoomStatus.run(STATUS.GUEST_RECORDING, room.id);
     room.status = STATUS.GUEST_RECORDING;
     const guestDeadline = Date.now() + config.timing.guestPhaseSeconds * 1000;
     this._schedule(room, config.timing.guestPhaseSeconds * 1000, () =>
@@ -281,7 +281,7 @@ class RoomManager {
     if (room.status !== STATUS.GUEST_RECORDING) return;
     this._clearTimers(room);
     room.status = STATUS.SCORING;
-    stmts.setRoomStatus.run(room.id, STATUS.SCORING);
+    stmts.setRoomStatus.run(STATUS.SCORING, room.id);
     this.broadcast(room.code, "phase", { status: STATUS.SCORING });
     this._sync(room);
     try {
@@ -307,8 +307,8 @@ class RoomManager {
       );
     }
     room.status = STATUS.RESULT;
-    stmts.setRoomStatus.run(room.id, STATUS.RESULT);
-    stmts.setRoundStatus.run(room.round.dbId, "DONE");
+    stmts.setRoomStatus.run(STATUS.RESULT, room.id);
+    stmts.setRoundStatus.run("DONE", room.round.dbId);
     this.broadcast(room.code, "result", result);
     this._sync(room);
     // 10 秒后回到等待大厅
@@ -319,7 +319,7 @@ class RoomManager {
     this._clearTimers(room);
     room.status = STATUS.WAITING;
     room.round = null;
-    stmts.setRoomStatus.run(room.id, STATUS.WAITING);
+    stmts.setRoomStatus.run(STATUS.WAITING, room.id);
     for (const m of room.members.values()) m.ready = false;
     stmts.resetReady.run(room.id);
     this.broadcast(room.code, "phase", { status: STATUS.WAITING });
@@ -330,7 +330,7 @@ class RoomManager {
     this._clearTimers(room);
     room.status = STATUS.WAITING;
     room.round = null;
-    stmts.setRoomStatus.run(room.id, STATUS.WAITING);
+    stmts.setRoomStatus.run(STATUS.WAITING, room.id);
     this.broadcast(room.code, "error", { message });
     this.broadcast(room.code, "phase", { status: STATUS.WAITING });
     this._sync(room);
@@ -342,7 +342,7 @@ class RoomManager {
       for (const [userId, m] of room.members) {
         if (m.socketId === socketId) {
           m.connected = false;
-          stmts.setConnected.run(room.id, userId, 0);
+          stmts.setConnected.run(0, room.id, userId);
           if (userId === room.hostId) {
             // 房主断开：先标记，等待重连；若 socket 关闭事件判定为离开则解散
           }
@@ -383,7 +383,7 @@ class RoomManager {
     member.socketId = user.socketId;
     member.connected = true;
     member.nickname = user.nickname || member.nickname;
-    stmts.setConnected.run(room.id, user.userId, 1);
+    stmts.setConnected.run(1, room.id, user.userId);
     this._sync(room);
     return room;
   }

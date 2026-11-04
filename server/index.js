@@ -59,7 +59,7 @@ app.get("/audio/host/:code", (req, res) => {
 
 // 通用音频访问：按音频 ID 取文件（火山识别回调与客户端播放共用）
 app.get("/audio/play/:id", (req, res) => {
-  const audio = stmts.getAudioById && stmts.getAudioById.run(Number(req.params.id));
+  const audio = stmts.getAudioById && stmts.getAudioById.get(Number(req.params.id));
   if (!audio || !audio.processed_path || !fs.existsSync(audio.processed_path)) {
     return res.status(404).end();
   }

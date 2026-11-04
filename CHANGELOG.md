@@ -2,6 +2,35 @@
 
 本项目所有版本变更、问题根因与修复记录均在此登记，日期按实际变更填写。
 
+## [1.2.0] - 2026-11-04：修复真实评分失败（音频 404 / 火山 45000006）
+
+### 问题现象
+- 1 房主 + 1 访客走到最后一步，前端直接显示“评分失败”。
+- 服务端日志：火山 ASR 返回 `45000006 The audio could not be downloaded`，提交的 URL 为 `/audio/play/:id`。
+- 外部访问该 URL 稳定返回 404，但磁盘音频文件真实存在、数据库记录与路径一致。
+
+### 根因分析
+1. **better-sqlite3 调用方法误用（核心根因）**：`/audio/play/:id` 对 SELECT 预处理语句使用了 `.run()`。`.run()` 仅用于写操作，返回 `{ changes, lastInsertRowid }`，并不返回查询行；因此拿到的对象没有 `processed_path`，路由判定为找不到文件而返回 404。火山服务回拉该 404 URL 失败，于是报 `45000006`。
+2. 同类方法误用：`saveTranscript` 中的 `listRoundAudios.run(...)` 应为 `.all(...)`，否则 `.find` 会失败。
+3. **预处理语句参数顺序系统性写反**：多个 UPDATE 语句（`setReady`、`setRoomStatus`、`setConnected`、`setRoundStatus`、`setAudioTranscript`）的 SQL 占位顺序是“先字段值、后 id”，调用却按“先 id、后值”传参，导致数据库中的准备/连接/房间状态/转写文本均未真正更新。运行时因以内存状态为准而未暴露，但持久化实际失效。
+
+### 修复内容
+- SELECT 语句改用正确方法：`getAudioById.get(...)`、`listRoundAudios.all(...)`。
+- 按各 SQL 占位顺序修正全部写操作参数：`setReady`、`setRoomStatus`（6 处）、`setConnected`（2 处）、`setRoundStatus`、`setAudioTranscript`。
+- 评分失败在服务端 `console.error` 留痕，便于后续定位。
+
+### 变更文件
+- server/index.js、server/roomManager.js、server/ai/index.js
+
+### 验证
+- 三个修改文件 `node --check` 通过。
+- 本地启动服务，数据库现有全部音频 id 的 `/audio/play/:id` 均返回 200 且可正常下载。
+- 规则测试、重连回归测试、端到端测试全部通过；新增持久化专项校验（准备/连接/状态/转写均正确落库）通过。
+
+### 结论
+- 本次失败与 Key 额度、充值无关：方舟 LLM 与外部公网 ASR 均真实调用成功；问题完全在服务端数据库调用。
+- 服务由 systemd 常驻，无需每次使用后手动挂起；更新代码后重启服务即可加载新版本。
+
 ## [1.1.0] - 2026-11-03：修复访客阶段闪退、录音互斥、重连健壮性
 
 ### 问题现象

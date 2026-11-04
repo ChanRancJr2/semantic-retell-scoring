@@ -83,9 +83,9 @@ async function realScore(room) {
 
 function saveTranscript(room, userId, text) {
   const audio = stmts
-    .listRoundAudios.run(room.round.dbId)
+    .listRoundAudios.all(room.round.dbId)
     .find((a) => a.user_id === userId);
-  if (audio) stmts.setAudioTranscript.run(audio.id, text);
+  if (audio) stmts.setAudioTranscript.run(text, audio.id);
 }
 
 module.exports = {
